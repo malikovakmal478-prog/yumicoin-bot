@@ -12,7 +12,7 @@ def home():
     return "Bot ishlayapti!"
 
 TOKEN = "8127924861:AAE1hR4heMcsYm3cbCs-tfmpp1p0k7MNGMk"
-ADMIN_ID = 8127924861
+ADMIN_ID = 7849637859
 KANAL = "@arzon_almazbor"
 
 bot = telebot.TeleBot(TOKEN)
