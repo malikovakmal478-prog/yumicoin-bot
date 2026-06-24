@@ -11,13 +11,14 @@ app = Flask(__name__)
 def home():
     return "Bot ishlayapti!"
 
-TOKEN = "8127924861:AAE1hR4heMcsYm3cbCs-tfmpp1p0k7MNGMk"
+TOKEN = "8915795946:AAFmSilXgG9ucarv6tmHCoMaHhbWkTMA98k"
 ADMIN_ID = 7849637859
 KANAL = "@arzon_almazbor"
 
 bot = telebot.TeleBot(TOKEN)
 users = {}
 auksion = {"faol": False, "mahsulot": "", "ishtirokchilar": {}, "tugash": ""}
+bozor_lots = {}
 
 def saqlash():
     with open("users.json", "w") as f:
@@ -48,6 +49,7 @@ def bosh_menyu():
     m.row("💎 Balans", "🎁 Kunlik bonus")
     m.row("👥 Referal", "✅ Vazifalar")
     m.row("🎰 Auktsion", "📊 Reyting")
+    m.row("💸 Almaz yuborish", "🛒 Bozor")
     m.row("ℹ️ Ma'lumot")
     return m
 
@@ -137,6 +139,136 @@ def vazifa_tekshir(call):
     else:
         bot.answer_callback_query(call.id, "❌ Avval obuna bo'ling!")
 
+@bot.message_handler(func=lambda m: m.text == "💸 Almaz yuborish")
+def almaz_yuborish(message):
+    uid = str(message.from_user.id)
+    profil(message.from_user.id)
+    msg = bot.send_message(message.chat.id,
+        f"💸 Almaz yuborish\n\n"
+        f"Sizda: {users[uid]['almaz']} 💎\n\n"
+        f"Qabul qiluvchining ID sini yozing:"
+    )
+    bot.register_next_step_handler(msg, almaz_yuborish_id, uid)
+
+def almaz_yuborish_id(message, yuboruvchi):
+    try:
+        qabul_id = str(int(message.text))
+        if qabul_id not in users:
+            bot.send_message(message.chat.id, "❌ Bu foydalanuvchi botda yo'q!")
+            return
+        if qabul_id == yuboruvchi:
+            bot.send_message(message.chat.id, "❌ O'zingizga yubora olmaysiz!")
+            return
+        msg = bot.send_message(message.chat.id, f"Necha almaz yubormoqchisiz?\nSizda: {users[yuboruvchi]['almaz']} 💎")
+        bot.register_next_step_handler(msg, almaz_yuborish_miqdor, yuboruvchi, qabul_id)
+    except:
+        bot.send_message(message.chat.id, "❌ Faqat raqam yozing!")
+
+def almaz_yuborish_miqdor(message, yuboruvchi, qabul_id):
+    try:
+        miqdor = int(message.text)
+        if miqdor <= 0:
+            bot.send_message(message.chat.id, "❌ Noto'g'ri!")
+            return
+        if users[yuboruvchi]["almaz"] < miqdor:
+            bot.send_message(message.chat.id, f"❌ Yetarli almaz yo'q!\nSizda: {users[yuboruvchi]['almaz']} 💎")
+            return
+        users[yuboruvchi]["almaz"] -= miqdor
+        users[qabul_id]["almaz"] += miqdor
+        saqlash()
+        bot.send_message(message.chat.id, f"✅ Yuborildi!\n💎 {miqdor} almaz\nQoldi: {users[yuboruvchi]['almaz']} 💎")
+        try:
+            bot.send_message(int(qabul_id), f"🎁 Sizga {miqdor} 💎 almaz yuborildi!")
+        except:
+            pass
+    except:
+        bot.send_message(message.chat.id, "❌ Faqat raqam!")
+
+@bot.message_handler(func=lambda m: m.text == "🛒 Bozor")
+def bozor(message):
+    uid = str(message.from_user.id)
+    profil(message.from_user.id)
+    markup = telebot.types.InlineKeyboardMarkup()
+    markup.add(telebot.types.InlineKeyboardButton("📋 Lotlarni ko'rish", callback_data="bozor_kor"))
+    markup.add(telebot.types.InlineKeyboardButton("➕ Lot qo'yish", callback_data="bozor_qoy"))
+    bot.send_message(message.chat.id, "🛒 Bozor\n\nAlmaz sotib oling yoki soting!", reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda c: c.data == "bozor_kor")
+def bozor_kor(call):
+    if not bozor_lots:
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, "🛒 Hozircha lot yo'q!")
+        return
+    bot.answer_callback_query(call.id)
+    text = "🛒 Mavjud lotlar:\n\n"
+    markup = telebot.types.InlineKeyboardMarkup()
+    for lot_id, lot in bozor_lots.items():
+        text += f"#{lot_id} — {lot['miqdor']} 💎 = {lot['narx']} coin\n"
+        markup.add(telebot.types.InlineKeyboardButton(
+            f"#{lot_id} sotib olish", callback_data=f"sotib_ol_{lot_id}"))
+    bot.send_message(call.message.chat.id, text, reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda c: c.data == "bozor_qoy")
+def bozor_qoy(call):
+    uid = str(call.from_user.id)
+    profil(call.from_user.id)
+    bot.answer_callback_query(call.id)
+    msg = bot.send_message(call.message.chat.id,
+        f"➕ Lot qo'yish\n\nSizda: {users[uid]['almaz']} 💎\n\nNecha almaz sotmoqchisiz?")
+    bot.register_next_step_handler(msg, bozor_miqdor, uid)
+
+def bozor_miqdor(message, uid):
+    try:
+        miqdor = int(message.text)
+        if miqdor <= 0 or users[uid]["almaz"] < miqdor:
+            bot.send_message(message.chat.id, "❌ Yetarli almaz yo'q!")
+            return
+        msg = bot.send_message(message.chat.id, f"Narxini yozing (coin da):")
+        bot.register_next_step_handler(msg, bozor_narx, uid, miqdor)
+    except:
+        bot.send_message(message.chat.id, "❌ Faqat raqam!")
+
+def bozor_narx(message, uid, miqdor):
+    try:
+        narx = int(message.text)
+        if narx <= 0:
+            bot.send_message(message.chat.id, "❌ Noto'g'ri narx!")
+            return
+        lot_id = str(len(bozor_lots) + 1)
+        bozor_lots[lot_id] = {"egasi": uid, "miqdor": miqdor, "narx": narx}
+        users[uid]["almaz"] -= miqdor
+        saqlash()
+        bot.send_message(message.chat.id,
+            f"✅ Lot qo'yildi!\n"
+            f"💎 {miqdor} almaz = {narx} coin\n"
+            f"Lot #{lot_id}")
+    except:
+        bot.send_message(message.chat.id, "❌ Faqat raqam!")
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("sotib_ol_"))
+def sotib_ol(call):
+    uid = str(call.from_user.id)
+    profil(call.from_user.id)
+    lot_id = call.data.split("_")[2]
+    if lot_id not in bozor_lots:
+        bot.answer_callback_query(call.id, "❌ Lot topilmadi!")
+        return
+    lot = bozor_lots[lot_id]
+    if lot["egasi"] == uid:
+        bot.answer_callback_query(call.id, "❌ O'z lotingizni sotib ololmaysiz!")
+        return
+    if users[uid]["coin"] < lot["narx"]:
+        bot.answer_callback_query(call.id, "❌ Yetarli coin yo'q!")
+        return
+    users[uid]["coin"] -= lot["narx"]
+    users[uid]["almaz"] += lot["miqdor"]
+    users[lot["egasi"]]["coin"] += lot["narx"]
+    del bozor_lots[lot_id]
+    saqlash()
+    bot.answer_callback_query(call.id, "✅ Sotib olindi!")
+    bot.send_message(call.message.chat.id,
+        f"✅ Sotib olindi!\n+{lot['miqdor']} 💎 Almaz\n-{lot['narx']} coin")
+
 @bot.message_handler(func=lambda m: m.text == "🎰 Auktsion")
 def auksion_kor(message):
     if not auksion["faol"]:
@@ -145,7 +277,9 @@ def auksion_kor(message):
     eng_kop = max(auksion["ishtirokchilar"].values()) if auksion["ishtirokchilar"] else 0
     markup = telebot.types.InlineKeyboardMarkup()
     markup.add(telebot.types.InlineKeyboardButton("💎 Tikish", callback_data="auks_tikla"))
-    bot.send_message(message.chat.id, f"🎰 Faol Auktsion!\n\n🎁 Mahsulot: {auksion['mahsulot']}\n💎 Eng yuqori: {eng_kop}\n👥 Ishtirokchilar: {len(auksion['ishtirokchilar'])}\n⏰ Tugaydi: {auksion['tugash']}", reply_markup=markup)
+    bot.send_message(message.chat.id,
+        f"🎰 Faol Auktsion!\n\n🎁 Mahsulot: {auksion['mahsulot']}\n💎 Eng yuqori: {eng_kop}\n👥 Ishtirokchilar: {len(auksion['ishtirokchilar'])}\n⏰ Tugaydi: {auksion['tugash']}",
+        reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda c: c.data == "auks_tikla")
 def auks_tikla_callback(call):
@@ -153,7 +287,8 @@ def auks_tikla_callback(call):
     profil(call.from_user.id)
     eng_kop = max(auksion["ishtirokchilar"].values()) if auksion["ishtirokchilar"] else 0
     bot.answer_callback_query(call.id)
-    msg = bot.send_message(call.message.chat.id, f"💎 Necha almaz tikasiz?\nSizda: {users[uid]['almaz']} 💎\nEng yuqori: {eng_kop} 💎\n\nRaqam yozing:")
+    msg = bot.send_message(call.message.chat.id,
+        f"💎 Necha almaz tikasiz?\nSizda: {users[uid]['almaz']} 💎\nEng yuqori: {eng_kop} 💎\n\nRaqam yozing:")
     bot.register_next_step_handler(msg, auks_tikla_son, uid)
 
 def auks_tikla_son(message, uid):
@@ -174,7 +309,8 @@ def auks_tikla_son(message, uid):
         auksion["ishtirokchilar"][uid] = miqdor
         users[uid]["almaz"] -= miqdor
         saqlash()
-        bot.send_message(message.chat.id, f"✅ Tiklandingiz!\n💎 Tiklov: {miqdor}\nQoldi: {users[uid]['almaz']} 💎")
+        bot.send_message(message.chat.id,
+            f"✅ Tiklandingiz!\n💎 Tiklov: {miqdor}\nQoldi: {users[uid]['almaz']} 💎")
     except:
         bot.send_message(message.chat.id, "❌ Faqat raqam!")
 
@@ -228,7 +364,15 @@ def reyting(message):
 
 @bot.message_handler(func=lambda m: m.text == "ℹ️ Ma'lumot")
 def malumot(message):
-    bot.send_message(message.chat.id, "ℹ️ Bot haqida:\n\n💎 Almaz yig'ing\n👥 Do'st taklif qiling +3 💎\n🎁 Kunlik bonus +5 💎\n🎰 Auktsion o'ynang\n\n📢 @arzon_almazbor")
+    bot.send_message(message.chat.id,
+        "ℹ️ Bot haqida:\n\n"
+        "💎 Almaz yig'ing\n"
+        "👥 Do'st taklif qiling +3 💎\n"
+        "🎁 Kunlik bonus +5 💎\n"
+        "🎰 Auktsion o'ynang\n"
+        "💸 Almaz yuboring\n"
+        "🛒 Bozorda soting\n\n"
+        "📢 @arzon_almazbor")
 
 print("✅ Bot ishga tushdi!")
 threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
