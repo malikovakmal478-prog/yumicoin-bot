@@ -11,7 +11,7 @@ app = Flask(__name__)
 def home():
     return "Bot ishlayapti!"
 
-TOKEN = "8915795946:AAFmSilXgG9ucarv6tmHCoMaHhbWkTMA98k"
+TOKEN ="8127924861:AAE1hR4heMcsYm3cbCs-tfmpp1p0k7MNGMk "
 ADMIN_ID = 7849637859
 KANAL = "@arzon_almazbor"
 
